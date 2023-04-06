@@ -2,8 +2,6 @@
 
 pragma solidity ^0.8.18;
 
-import "hardhat/console.sol";
-import './Log.sol';
 import './interfaces/IJsDocParser.sol';
 import './Utf8.sol';
 
@@ -38,7 +36,7 @@ contract JsDocParser is IJsDocParser {
     inParamDesc
   }
 
-  function parse(string calldata code) external view override returns (IJsDocParser.JsDocComment[] memory) {
+  function parse(string calldata code) external pure override returns (IJsDocParser.JsDocComment[] memory) {
     bytes calldata sourceBytes = bytes(code);
     uint commentCount = 0;
     uint commentArrayPageSize = 10;
@@ -48,7 +46,6 @@ contract JsDocParser is IJsDocParser {
 
     while (context.currentPos < context.eofPos) {
       IJsDocParser.JsDocComment memory comment = _nextComment(sourceBytes, context);
-      Log.log(comment);
       if (comment.lines.length == 0) {
         continue;
       }
@@ -60,7 +57,6 @@ contract JsDocParser is IJsDocParser {
     }
 
     // cut of redundant elements
-    console.log('COUNT %d', commentCount);
     comments = _resize(comments, commentCount);
     return comments;
   }
@@ -74,27 +70,21 @@ contract JsDocParser is IJsDocParser {
   function _nextComment(
     bytes calldata source,
     IJsDocParser.Context memory context
-  ) private view returns (IJsDocParser.JsDocComment memory) {
-    console.log('_nextComment');
+  ) private pure returns (IJsDocParser.JsDocComment memory) {
     IJsDocParser.JsDocComment memory comment;
     context.currentPos = _skipSpaces(source, context.currentPos, context.eofPos);
     if (context.eofPos <= context.currentPos) { // ends with space
-      console.log('END comment');
       return comment;
     }
 
     IUtf8Char.Utf8Char memory char = Utf8.getNextCharacter(source, context.currentPos);
     if (char.code == 0x2F) { // slash
-      console.log('slash');
       IUtf8Char.Utf8Char memory nextChar = Utf8.getNextCharacter(source, context.currentPos + 1);
       if (nextChar.code == 0x2A) { // block comment
-        console.log('block comment');
         nextChar = Utf8.getNextCharacter(source, context.currentPos + 2);
         if (nextChar.code == 0x2A) { // possible jsdoc comment
-          console.log('possible jsdoc comment');
           nextChar = Utf8.getNextCharacter(source, context.currentPos + 3);
           if (nextChar.code != 0x2A) { // jsdoc comment
-            console.log('jsdoc comment');
             comment = _readJsDocComment(source, context);
             context.currentPos += comment.sizeInBytes;
           } else { // starts with /***. normal comment
@@ -122,8 +112,7 @@ contract JsDocParser is IJsDocParser {
   function _readJsDocComment(
     bytes calldata source,
     IJsDocParser.Context memory context
-  ) private view returns (IJsDocParser.JsDocComment memory comment) {
-    console.log('IN _readJsDocComment');
+  ) private pure returns (IJsDocParser.JsDocComment memory comment) {
     IJsDocParser.Context memory localContext;
     localContext.lineStartPos = context.currentPos;
     localContext.currentPos = context.currentPos + 3; // skip /**
@@ -135,24 +124,19 @@ contract JsDocParser is IJsDocParser {
     IJsDocParser.JsDocTag memory curTag;
     while (localContext.currentPos < localContext.eofPos) {
       IUtf8Char.Utf8Char memory char = Utf8.getNextCharacter(source, localContext.currentPos);
-      console.log('CHAR %d', char.code);
 
       if (curState == ParseState.commentStart) {
-        console.log('IN commentStart');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
-          console.log('fix comment_commentStart');
           _addCommentLine(comment, source, localContext.lineStartPos, localContext.currentPos + 2, localContext.currentLine);
           _updateDescription(comment, localContext, source);
           return comment;
         }
         if (char.code == 0x2A) { // *
-          console.log('TO inDescription_commentStart');
           localContext.tokenStartPos = localContext.currentPos;
           localContext.tokenEndPos = localContext.currentPos;
           ++localContext.currentPos;
           curState = ParseState.inDescription;
         } else if (Utf8.isNewLine(char.code)) {
-          console.log('TO descriptionSearch commentStart');
           _fixLine(comment, localContext, source, char.size);
           curState = ParseState.descriptionSearch;
         } else if (char.code == 0x40) { // @
@@ -160,32 +144,26 @@ contract JsDocParser is IJsDocParser {
             Utf8.getNextCharacter(source, localContext.currentPos + 1).code == 0x20 ||
             _isEndMarker(localContext.currentPos + 1, localContext.currentPos + 2, source)
           ) {
-            console.log('TO inDescription_commentStart2');
             localContext.tokenStartPos = localContext.currentPos;
             localContext.tokenEndPos = ++localContext.currentPos;
             curState = ParseState.inDescription;
           } else {
-            console.log('TO inTagName_commentStart');
             localContext.tokenStartPos = ++localContext.currentPos;
             localContext.tokenEndPos = localContext.tokenStartPos + 1;
             curState = ParseState.inTagName;
           }
         } else {
-          console.log('TO inDescription_commentStart3');
           localContext.tokenStartPos = localContext.currentPos;
           localContext.tokenEndPos = ++localContext.currentPos;
           curState = ParseState.inDescription;
         }
       } else if (curState == ParseState.descriptionSearch) {
-        console.log('IN descriptionSearch');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
-          console.log('fix comment_descriptionSearch');
           _addCommentLine(comment, source, localContext.lineStartPos, localContext.currentPos + 2, localContext.currentLine);
           _updateDescription(comment, localContext, source);
           return comment;
         }
         if (char.code == 0x2A) { // *
-          console.log('TO inDescription_descriptionSearch');
           ++localContext.currentPos;
           localContext.currentPos = _skipSpaces(source, localContext.currentPos, localContext.eofPos);
           bool isBlockTagFollowing = _isStartedWithBlockTagMarker(localContext.currentPos, localContext.eofPos, source);
@@ -200,11 +178,7 @@ contract JsDocParser is IJsDocParser {
             curState = ParseState.inDescription;
           }
         } else if (Utf8.isNewLine(char.code)) {
-          console.log('TO descriptionSearch descriptionSearch');
-          // is description continued?
-          uint skippedPos = _skipSpaces(source, localContext.currentPos + char.size, localContext.eofPos);
-          bool descEnded = _isEndMarker(skippedPos, skippedPos + 1, source) || _isStartedWithBlockTagMarker(skippedPos, localContext.eofPos, source);
-          if (!descEnded) {
+          if (_isDescriptionContinued(localContext.currentPos + char.size, localContext.eofPos, source)) {
             localContext.tokenEndPos += char.size; // add CR
           }
           _updateDescription(comment, localContext, source);
@@ -212,38 +186,27 @@ contract JsDocParser is IJsDocParser {
         } else if (char.code == 0x40) { // @
           ++localContext.currentPos;
           if (Utf8.getNextCharacter(source, localContext.currentPos + 1).code == 0x20) { // invalid tag
-            console.log('TO inDescription_descriptionSearch2');
             curState = ParseState.inDescription;
           } else {
-            console.log('TO inTagName_descriptionSearch');
             localContext.tokenStartPos = localContext.currentPos;
             localContext.tokenEndPos = localContext.tokenStartPos + 1;
             curState = ParseState.inTagName;
           }
         } else {
-          console.log('TO inDescription_descriptionSearch3');
           localContext.tokenStartPos = localContext.currentPos;
           localContext.tokenEndPos = ++localContext.currentPos;
           curState = ParseState.inDescription;
         }
       } else if (curState == ParseState.inDescription) {
-        console.log('IN inDescription');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
-          console.log('fix comment2');
           _addCommentLine(comment, source, localContext.lineStartPos, localContext.currentPos + 2, localContext.currentLine);
           _updateDescription(comment, localContext, source);
-          console.log('TOKNE STT %d', localContext.tokenStartPos);
-          console.log('TOKNE END %d', localContext.tokenEndPos);
           return comment;
         }
         if (char.code == 0x2A) { // *
           localContext.tokenEndPos = ++localContext.currentPos;
         } else if (Utf8.isNewLine(char.code)) {
-          console.log('TO descriptionSearch_inDescription');
-          // is description continued?
-          uint skippedPos = _skipSpaces(source, localContext.currentPos + char.size, localContext.eofPos);
-          bool descEnded = _isEndMarker(skippedPos, skippedPos + 1, source) || _isStartedWithBlockTagMarker(skippedPos, localContext.eofPos, source);
-          if (!descEnded) {
+          if (_isDescriptionContinued(localContext.currentPos + char.size, localContext.eofPos, source)) {
             localContext.tokenEndPos += char.size; // add CR
           }
           
@@ -254,65 +217,51 @@ contract JsDocParser is IJsDocParser {
           localContext.tokenEndPos = ++localContext.currentPos;
         }
       } else if (curState == ParseState.tagNameSearch) {
-        console.log('IN tagNameSearch');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
-          console.log('fix commment tagNameSearch');
           localContext.currentPos += 2;
           _fixComment(comment, localContext, curState, curTag, source);
           return comment;
         }
         if (Utf8.isNewLine(char.code)) {
-          console.log('TO tagNameSearch FROM tagNameSearch');
           _fixLine(comment, localContext, source, char.size);
         } else if (char.code == 0x40) { // @
-          console.log('TO inTagName FROM tagNameSearch');
           ++localContext.currentPos;
           localContext.tokenStartPos = localContext.currentPos;
           localContext.tokenEndPos = localContext.tokenStartPos + 1;
           curState = ParseState.inTagName;
         } else {
-          console.log('TO inLineText FROM tagNameSearch');
           localContext.tokenStartPos = localContext.currentPos;
           localContext.tokenEndPos = ++localContext.currentPos;
           curState = ParseState.descriptionSearch;
         }
       } else if (curState == ParseState.inTagName) {
-        console.log('IN inTagName');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
-          console.log('fix commment inTagName');
           localContext.currentPos += 2;
           _fixComment(comment, localContext, curState, curTag, source);
           return comment;
         }
         if (Utf8.isNewLine(char.code)) {
-          console.log('TO paramDescSearch FROM inTagName');
           _updateTagAttr(curTag, curState, localContext, source);
           _fixLine(comment, localContext, source, char.size);
           curState = ParseState.paramDescSearch;
         } else if (char.code == 0x20) { // space
-          console.log('TO paramAttrSearch FROM inTagName');
           _updateTagAttr(curTag, curState, localContext, source);
           localContext.currentPos = _skipSpaces(source, localContext.currentPos, localContext.eofPos);
           curState = ParseState.paramAttrSearch;
         } else {
-          console.log('extend TAG NAME');
           localContext.tokenEndPos = ++localContext.currentPos;
         }
       } else if (curState == ParseState.paramAttrSearch) {
-        console.log('IN paramAttrSearch');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
-          console.log('fix commment paramAttrSearch');
           localContext.currentPos += 2;
           _fixComment(comment, localContext, curState, curTag, source);
           return comment;
         }
         if (char.code == 0x2A) { // *
-          console.log('TO inParamName FROM paramAttrSearch');
           localContext.tokenStartPos = localContext.currentPos;
           localContext.tokenEndPos = ++localContext.currentPos;
           curState = ParseState.inParamName;
         } else if (Utf8.isNewLine(char.code)) {
-          console.log('TO paramDescSearch FROM paramAttrSearch');
           _updateTagAttr(curTag, curState, localContext, source);
           _fixLine(comment, localContext, source, char.size);
           curState = ParseState.paramDescSearch;
@@ -320,42 +269,34 @@ contract JsDocParser is IJsDocParser {
         } else if (char.code == 0x7B) { // {
           ++localContext.currentPos;
           localContext.currentPos = _skipSpaces(source, localContext.currentPos, localContext.eofPos);
-          console.log('TO inParamType FROM paramAttrSearch');
           localContext.tokenStartPos = localContext.currentPos;
           localContext.tokenEndPos = localContext.tokenStartPos;
           curState = ParseState.inParamType;
         } else {
-          console.log('TO inParamName FROM paramAttrSearch');
           localContext.tokenStartPos = localContext.currentPos;
           localContext.tokenEndPos = ++localContext.currentPos;
           curState = ParseState.inParamName;
         }
       } else if (curState == ParseState.inParamType) {
-        console.log('IN inParamType');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
-          console.log('fix commment inParamType');
           localContext.currentPos += 2;
           _fixComment(comment, localContext, curState, curTag, source);
           return comment;
         }
         if (Utf8.isNewLine(char.code)) {
-          console.log('newline ParamType');
           _updateTagAttr(curTag, curState, localContext, source);
           _fixLine(comment, localContext, source, char.size);
           localContext.tokenStartPos = localContext.currentPos; 
           localContext.tokenEndPos = localContext.currentPos;
         } else if (char.code == 0x7D) { // }
-          console.log('TO paramNameSearch FROM inParamType');
           _updateTagAttr(curTag, curState, localContext, source);
           ++localContext.currentPos;
           localContext.currentPos = _skipSpaces(source, localContext.currentPos, localContext.eofPos);
           curState = ParseState.paramNameSearch;
         } else if (char.code == 0x20) { // space
-          console.log('expand ParamType with space');
           uint skippedPos = _skipSpaces(source, localContext.currentPos, localContext.eofPos);
           if (Utf8.getNextCharacter(source, skippedPos).code == 0x7D) {
             // skip spaces up to }
-            console.log('skip spaces up to }');
             localContext.tokenEndPos = localContext.currentPos; // before the spaces
             localContext.currentPos = skippedPos;
           } else {
@@ -363,31 +304,25 @@ contract JsDocParser is IJsDocParser {
             localContext.tokenEndPos = localContext.currentPos;
           }
         } else {
-          console.log('expand ParamType');
           ++localContext.currentPos;
           localContext.tokenEndPos = localContext.currentPos;
         }
       } else if (curState == ParseState.paramNameSearch) {
-        console.log('IN paramNameSearch');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
-          console.log('fix commment paramNameSearch');
           localContext.currentPos += 2;
           _fixComment(comment, localContext, curState, curTag, source);
           return comment;
         }
         if (Utf8.isNewLine(char.code)) {
-          console.log('TO paramDescSearch FROM paramNameSearch');
           _updateTagAttr(curTag, curState, localContext, source);
           _fixLine(comment, localContext, source, char.size);
           curState = ParseState.paramDescSearch;
         } else {
-          console.log('TO newLine FROM inParamName');
           localContext.tokenStartPos = localContext.currentPos;
           localContext.tokenEndPos = ++localContext.currentPos;
           curState = ParseState.inParamName;
         }
       } else if (curState == ParseState.inParamName) {
-        console.log('IN inParamName');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
           localContext.currentPos += 2;
           _fixComment(comment, localContext, curState, curTag, source);
@@ -408,9 +343,7 @@ contract JsDocParser is IJsDocParser {
           localContext.tokenEndPos = ++localContext.currentPos;
         }
       } else if (curState == ParseState.paramDescSearch) {
-        console.log('IN paramDescSearch');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
-          console.log('fix commment paramDescSearch');
           localContext.currentPos += 2;
           _fixComment(comment, localContext, curState, curTag, source);
           return comment;
@@ -423,58 +356,42 @@ contract JsDocParser is IJsDocParser {
           bool isBlockTagFollowing = _isStartedWithBlockTagMarker(localContext.currentPos, localContext.eofPos, source);
           if (isBlockTagFollowing) {
             // current tag ended. so flush and search next one
-            console.log('TO tagNameSearch FROM paramDescSearch');
             _addAndFlushTag(comment, curTag);
             curState = ParseState.tagNameSearch;
           } else {
             // description body found
-            console.log('TO inParamDesc FROM paramDescSearch');
             localContext.tokenStartPos = localContext.currentPos;
             localContext.tokenEndPos = localContext.tokenStartPos;
             curState = ParseState.inParamDesc;
           }
         } else if (Utf8.isNewLine(char.code)) {
-          console.log('TO paramDescSearch FROM paramDescSearch');
-          // is description continued?
-          uint skippedPos = _skipSpaces(source, localContext.currentPos + char.size, localContext.eofPos);
-          bool descEnded = _isEndMarker(skippedPos, skippedPos + 1, source) || _isStartedWithBlockTagMarker(skippedPos, localContext.eofPos, source);
-          if (!descEnded) {
+          if (_isDescriptionContinued(localContext.currentPos + char.size, localContext.eofPos, source)) {
             localContext.tokenEndPos += char.size; // add CR
           }
-          _updateTagAttr(curTag, ParseState.inParamDesc, localContext, source);
+          _updateTagAttr(curTag, curState, localContext, source);
           _fixLine(comment, localContext, source, char.size);
         } else {
-          console.log('TO inParamDesc FROM paramDescSearch');
           localContext.tokenStartPos = localContext.currentPos;
           localContext.tokenEndPos = ++localContext.currentPos;
           curState = ParseState.inParamDesc;
         }
       } else if (curState == ParseState.inParamDesc) {
-        console.log('IN inParamDesc');
         if (_isEndMarker(localContext.currentPos, localContext.currentPos + 1, source)) {
-          console.log('fix commment inParamDesc');
           localContext.currentPos += 2;
           _fixComment(comment, localContext, curState, curTag, source);
           return comment;
         }
         if (Utf8.isNewLine(char.code)) {
-          console.log('TO paramDescSearch FROM inParamDesc');
-
-          // is param description continued?
-          uint skippedPos = _skipSpaces(source, localContext.currentPos + char.size, localContext.eofPos);
-          bool descEnded = _isEndMarker(skippedPos, skippedPos + 1, source) || _isStartedWithBlockTagMarker(skippedPos, localContext.eofPos, source);
-          if (!descEnded) {
+          if (_isDescriptionContinued(localContext.currentPos + char.size, localContext.eofPos, source)) {
             localContext.tokenEndPos += char.size; // add CR
           }
           _updateTagAttr(curTag, curState, localContext, source);
           _fixLine(comment, localContext, source, char.size);
           curState = ParseState.paramDescSearch;
         } else if (char.code == 0x20) { // space
-          console.log('expand paramDesc with space');
           uint skippedPos = _skipSpaces(source, localContext.currentPos, localContext.eofPos);
           if (_isEndMarker(skippedPos, skippedPos + 1, source)) {
             // skip spaces up to end marker
-            console.log('skip spaces up to */');
             localContext.tokenEndPos = localContext.currentPos; // before the space
             localContext.currentPos = skippedPos;
           } else {
@@ -482,7 +399,6 @@ contract JsDocParser is IJsDocParser {
             localContext.tokenEndPos = localContext.currentPos;
           }
         } else {
-          console.log('expand paramDesc');
           localContext.tokenEndPos = ++localContext.currentPos;
         }
       }
@@ -531,7 +447,7 @@ contract JsDocParser is IJsDocParser {
     ParseState state,
     IJsDocParser.Context memory context,
     bytes calldata source
-  ) private view {
+  ) private pure {
     if (context.tokenEndPos <= context.tokenStartPos) {
       return;
     }
@@ -540,19 +456,15 @@ contract JsDocParser is IJsDocParser {
     if (state == ParseState.inTagName) {
       tag.tagName = string.concat(tag.tagName, value);
     } else if (state == ParseState.inParamType) {
-      console.log('ADD TYPE %s', value);
       tag.paramType = string.concat(tag.paramType, value);
-      console.log('TOTAL TYPE %s', tag.paramType);
     } else if (state == ParseState.inParamName) {
       tag.paramName = string.concat(tag.paramName, value);
-    } else if (state == ParseState.inParamDesc) {
-      console.log('ADD DESC %s', value);
+    } else if (state == ParseState.inParamDesc || state == ParseState.paramDescSearch) {
       tag.paramDesc = string.concat(tag.paramDesc, value);
-      console.log('TOTAL DESC %s', tag.paramDesc);
     }
   }
 
-  function _setNewLineContext(JsDocParser.Context memory context, bytes calldata source, uint nwSize) private view {
+  function _setNewLineContext(JsDocParser.Context memory context, bytes calldata source, uint nwSize) private pure {
     ++context.currentLine;
     context.currentPos += nwSize;
     context.lineStartPos = context.currentPos;
@@ -563,12 +475,10 @@ contract JsDocParser is IJsDocParser {
     IJsDocParser.JsDocComment memory comment,
     IJsDocParser.Context memory context,
     bytes calldata source
-  ) private view {
+  ) private pure {
     string memory lineDesc = string(source[context.tokenStartPos:context.tokenEndPos]);
     comment.description = string.concat(comment.description, lineDesc);
     context.tokenStartPos = context.tokenEndPos;
-    console.log('ADD DESC %s', lineDesc);
-    console.log('TOTAL DESC %s', comment.description);
   }
   
   function _fixComment(
@@ -577,11 +487,9 @@ contract JsDocParser is IJsDocParser {
     ParseState state,
     IJsDocParser.JsDocTag memory tag,
     bytes calldata source
-  ) private view {
+  ) private pure {
     _addCommentLine(comment, source, context.lineStartPos, context.currentPos, context.currentLine);
     _updateTagAttr(tag, state, context, source);
-    console.log('param desc %s', tag.paramDesc);
-    console.log('add tag %s', tag.paramDesc);
     _addAndFlushTag(comment, tag);
   }
   
@@ -590,7 +498,7 @@ contract JsDocParser is IJsDocParser {
     IJsDocParser.Context memory context,
     bytes calldata source,
     uint nwSize
-  ) private view {
+  ) private pure {
     _addCommentLine(comment, source, context.lineStartPos, context.currentPos, context.currentLine);
     _setNewLineContext(context, source, nwSize);
   }
@@ -605,7 +513,7 @@ contract JsDocParser is IJsDocParser {
     bytes calldata source,
     uint startPos,
     uint eofPos
-  ) private view returns (uint){
+  ) private pure returns (uint){
     uint curPos = startPos;
     while (curPos < eofPos) {
       IUtf8Char.Utf8Char memory currentChar = Utf8.getNextCharacter(source, curPos);
@@ -627,7 +535,7 @@ contract JsDocParser is IJsDocParser {
         Utf8.getNextCharacter(source, endPos).code == 0x2F;
   }
   
-  function _isStartedWithBlockTagMarker(uint startPos, uint eofPos, bytes calldata source) private view returns (bool) {
+  function _isStartedWithBlockTagMarker(uint startPos, uint eofPos, bytes calldata source) private pure returns (bool) {
     uint skippedPos = _skipSpaces(source, startPos, eofPos);
     uint charCode = Utf8.getNextCharacter(source, skippedPos).code;
     if (charCode == 0x40) { // @
@@ -643,6 +551,11 @@ contract JsDocParser is IJsDocParser {
       }
     }
     return false;
+  }
+  
+  function _isDescriptionContinued(uint startPos, uint eofPos, bytes calldata source) private pure returns (bool) {
+    uint skippedPos = _skipSpaces(source, startPos, eofPos);
+    return !_isEndMarker(skippedPos, skippedPos + 1, source) && !_isStartedWithBlockTagMarker(skippedPos, eofPos, source);
   }
 
   /**
