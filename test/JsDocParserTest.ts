@@ -534,7 +534,7 @@ second line`);
     expect(result[0].description).to.equal('this is description. @tag {type} name desc ');
     expect(result[0].tags.length).to.equal(0);
   })
-  it.only('multi_comment', async function () {
+  it('multi_comment', async function () {
     const code = `/**
 * this is description.
 * @tag {type} name desc
