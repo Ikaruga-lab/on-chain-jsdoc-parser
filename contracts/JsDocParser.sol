@@ -67,10 +67,10 @@ contract JsDocParser is IJsDocParser {
   }
 
   /**
-   * Extract a token. Read next character and dispach a tokenizing task to the appropriate lexer.
+   * Extract a jsdoc comment 
    * @param source bytes sequence of source code.
-   * @param context Tokenization context.
-   * @return The token.
+   * @param context parsing context.
+   * @return jsdoc comment.
    */
   function _nextComment(
     bytes calldata source,
