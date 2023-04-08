@@ -10,5 +10,10 @@ export const addresses: {[key:string]: {[key:string]:{[key:string]:string}}} = {
     }
   },
   goerli: {
+    parser: {
+      Utf8: '0x0f986c0be6f46165Cc1D797E28Ab6f932ad069c8',
+  JsDocParser: '0x7ddD15362C67dC5B5297340a340ddf200872e56e',
+  JsDocParserProxy: '0xcba40Dc6249D3b5E59c33a94f09a2880d6EBfdfC',
+    }
   }
 }
